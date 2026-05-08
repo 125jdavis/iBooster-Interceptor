@@ -279,7 +279,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_S2_IN), isr_s2, CHANGE);
 
   wdt_enable(WDTO_2S);
-  manualOverride = true;
   setMode(Mode::PASSTHROUGH);
 
   Serial.println("# PASSTHROUGH LOCKED: S2-only measurement mode");
