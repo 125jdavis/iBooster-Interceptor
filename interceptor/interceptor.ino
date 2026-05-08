@@ -62,7 +62,6 @@ unsigned long restEnteredAt = 0;
 bool atRest = false;
 float commandTargetTravel = 0.0f;
 float commandCurrentTravel = 0.0f;
-unsigned long commandLastUpdateAt = 0;
 
 // -------------------------------------------------------
 // Calibration interpolation
@@ -202,7 +201,7 @@ void processSerialCommand(const char *line) {
   }
 
   char *endPtr = nullptr;
-  float requestedTravel = (float)strtod(parseStart, &endPtr);
+  float requestedTravel = strtod(parseStart, &endPtr);
   if (endPtr != parseStart) {
     while (*endPtr == ' ' || *endPtr == '\t') endPtr++;
     if (*endPtr == '\0') {
@@ -280,7 +279,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_S2_IN), isr_s2, CHANGE);
 
   wdt_enable(WDTO_2S);
-  commandLastUpdateAt = millis();
   manualOverride = true;
   setMode(Mode::PASSTHROUGH);
 
