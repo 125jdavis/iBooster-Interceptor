@@ -5,7 +5,6 @@
 
 // --- Pin definitions ---
 constexpr uint8_t PIN_S2_IN   = 3;
-constexpr uint8_t PIN_S4_IN   = 2;
 constexpr uint8_t PIN_S4_OUT  = 9;
 constexpr uint8_t PIN_S2_OUT  = 10;
 constexpr uint8_t PIN_SWT_SRC = 7;
@@ -13,8 +12,6 @@ constexpr uint8_t PIN_SWT_SRC = 7;
 // --- Sensor transfer function ---
 constexpr float S2_REST = 83.0f;
 constexpr float S2_FULL = 61.0f;
-constexpr float S4_REST = 17.0f;
-constexpr float S4_FULL = 39.0f;
 
 // --- Travel detection ---
 constexpr float REST_TOLERANCE       = 2.0f;
@@ -47,15 +44,10 @@ volatile Mode mode = Mode::PASSTHROUGH;
 bool manualOverride = false;
 
 volatile unsigned long rise_s2 = 0;
-volatile unsigned long rise_s4 = 0;
 volatile bool s2_valid = false;
-volatile bool s4_valid = false;
 volatile float s2inputDuty = S2_REST;
-volatile float s4inputDuty = S4_REST;
 volatile unsigned long s2_last_period = 1000UL;  // sensible default until first measurement
-volatile unsigned long s4_last_period = 1000UL;
 volatile unsigned long s2_highTime = 0;
-volatile unsigned long s4_highTime = 0;
 
 unsigned long timerPwmSet, timerPrint;
 unsigned long restEnteredAt = 0;
@@ -84,7 +76,7 @@ float lookupCurve(float travel) {
 void travelToDuty(float travel, float &s2duty, float &s4duty) {
   float t = constrain(travel, 0.0f, 100.0f) / 100.0f;
   s2duty = S2_REST + t * (S2_FULL - S2_REST);
-  s4duty = S4_REST + t * (S4_FULL - S4_REST);
+  s4duty = constrain(100.0f - s2duty, 0.0f, 100.0f);
 }
 
 // -------------------------------------------------------
@@ -111,34 +103,11 @@ void isr_s2() {
   }
 }
 
-void isr_s4() {
-  unsigned long now = micros();
-  if (digitalRead(PIN_S4_IN) == HIGH) {
-    if (s4_valid) {
-      unsigned long period = now - rise_s4;
-      if (period >= PWM_PERIOD_MIN && period <= PWM_PERIOD_MAX) {
-        s4_last_period = period;
-      }
-    }
-    rise_s4 = now;
-    s4_valid = true;
-  } else if (s4_valid && s4_last_period > 0) {
-    unsigned long highTime = now - rise_s4;
-    if (highTime > 0UL && highTime < s4_last_period) {
-      s4_highTime = highTime;  // capture for printing
-      float raw = (float)highTime / (float)s4_last_period * 100.0f;
-      s4inputDuty = EMA_ALPHA * raw + (1.0f - EMA_ALPHA) * s4inputDuty;
-    }
-  }
-}
-
 // -------------------------------------------------------
 // Helpers
 // -------------------------------------------------------
-float computeTravel(float s2, float s4) {
-  float t_s2 = (S2_REST - s2) / (S2_REST - S2_FULL) * 100.0f;
-  float t_s4 = (s4 - S4_REST) / (S4_FULL - S4_REST) * 100.0f;
-  return constrain((t_s2 + t_s4) / 2.0f, 0.0f, 100.0f);
+float computeTravelFromS2(float s2) {
+  return constrain((S2_REST - s2) / (S2_REST - S2_FULL) * 100.0f, 0.0f, 100.0f);
 }
 
 bool pedalAtRest(float travel) {
@@ -266,17 +235,14 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(PIN_S2_IN, INPUT);
-  pinMode(PIN_S4_IN, INPUT);
-
   pinMode(PIN_S4_OUT, OUTPUT);
   pinMode(PIN_S2_OUT, OUTPUT);
   TCCR1A = _BV(COM1A1) | _BV(COM1B1) | _BV(WGM11);
   TCCR1B = _BV(WGM13)  | _BV(WGM12)  | _BV(CS11);
   ICR1   = 1999;
-  OCR1A  = (uint16_t)(S4_REST / 100.0f * 1999.0f);
+  OCR1A  = (uint16_t)((100.0f - S2_REST) / 100.0f * 1999.0f);
   OCR1B  = (uint16_t)(S2_REST / 100.0f * 1999.0f);
 
-  attachInterrupt(digitalPinToInterrupt(PIN_S4_IN), isr_s4, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_S2_IN), isr_s2, CHANGE);
 
   wdt_enable(WDTO_2S);
@@ -285,7 +251,7 @@ void setup() {
   Serial.println("# Commands: P=passthrough  A=active  C=command  R=resume auto");
   Serial.println("# Command target: send 0..100 (or 'c <value>'), ramps at 25%/sec");
   // Serial.println("s2\ts4\tmode");
-  Serial.println("s2_high\ts2_period\ts4_high\ts4_period\tmode");
+  Serial.println("s2_high\ts2_period\tmode");
 }
 
 // -------------------------------------------------------
@@ -296,12 +262,11 @@ void loop() {
 
   handleSerial();
 
-  float s2, s4;
+  float s2;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     s2 = s2inputDuty;
-    s4 = s4inputDuty;
   }
-  float travel = computeTravel(s2, s4);
+  float travel = computeTravelFromS2(s2);
   unsigned long now = millis();
   float dtSec = (now - commandLastUpdateAt) / 1000.0f;
   commandLastUpdateAt = now;
@@ -339,7 +304,7 @@ void loop() {
       travelToDuty(commandCurrentTravel, s2out, s4out);
     } else {
       s2out = s2;
-      s4out = s4;
+      s4out = constrain(100.0f - s2out, 0.0f, 100.0f);
     }
     OCR1A = (uint16_t)constrain(s4out / 100.0f * 1999.0f, 0, 1999);
     OCR1B = (uint16_t)constrain(s2out / 100.0f * 1999.0f, 0, 1999);
@@ -347,18 +312,14 @@ void loop() {
   }
 
   // --- Serial output ---
-if (now - timerPrint >= PRINT_RATE) {
-    unsigned long s2ht, s4ht, s2per, s4per;
+  if (now - timerPrint >= PRINT_RATE) {
+    unsigned long s2ht, s2per;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       s2ht  = s2_highTime;
-      s4ht  = s4_highTime;
       s2per = s2_last_period;
-      s4per = s4_last_period;
     }
     Serial.print(s2ht);   Serial.print("\t");
     Serial.print(s2per);  Serial.print("\t");
-    Serial.print(s4ht);   Serial.print("\t");
-    Serial.print(s4per);  Serial.print("\t");
     if (mode == Mode::ACTIVE) {
       Serial.println("ACTIVE");
     } else if (mode == Mode::COMMAND) {
