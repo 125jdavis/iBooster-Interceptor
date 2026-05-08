@@ -28,6 +28,7 @@ constexpr unsigned long PWM_PERIOD_MAX = 1100UL;  // this window (~10% tolerance
 constexpr unsigned int PWM_SET_RATE = 5;
 constexpr unsigned int PRINT_RATE   = 20;
 constexpr float COMMAND_RAMP_RATE_PCT_PER_SEC = 25.0f;
+constexpr uint8_t CMD_BUFFER_SIZE = 32;
 
 // --- EMA smoothing (0.0 = max smooth, 1.0 = no smoothing) ---
 constexpr float EMA_ALPHA = 0.8f;
@@ -145,8 +146,12 @@ bool pedalAtRest(float travel) {
 }
 
 void setMode(Mode m) {
+  Mode oldMode = mode;
   mode = m;
   digitalWrite(PIN_SWT_SRC, (m == Mode::ACTIVE || m == Mode::COMMAND) ? HIGH : LOW);
+  if (oldMode != Mode::COMMAND && m == Mode::COMMAND) {
+    commandCurrentTravel = 0.0f;
+  }
 }
 
 void setCommandTarget(float target) {
@@ -220,11 +225,18 @@ void processSerialCommand(const char *line) {
 //   c 35  -> same as above, with explicit command prefix
 // -------------------------------------------------------
 void handleSerial() {
-  static char cmdBuffer[32];
+  static char cmdBuffer[CMD_BUFFER_SIZE];
   static uint8_t cmdLen = 0;
+  static bool discardingLongCommand = false;
   while (Serial.available() > 0) {
     char c = (char)Serial.read();
     if (c == '\r') {
+      continue;
+    }
+    if (discardingLongCommand) {
+      if (c == '\n') {
+        discardingLongCommand = false;
+      }
       continue;
     }
     if (c == '\n') {
@@ -234,10 +246,11 @@ void handleSerial() {
       continue;
     }
 
-    if (cmdLen < sizeof(cmdBuffer) - 1) {
+    if (cmdLen < CMD_BUFFER_SIZE - 1) {
       cmdBuffer[cmdLen++] = c;
     } else {
       cmdLen = 0;
+      discardingLongCommand = true;
       Serial.println("# Command too long");
     }
   }
