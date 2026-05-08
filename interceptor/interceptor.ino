@@ -26,6 +26,7 @@ constexpr unsigned int PWM_SET_RATE = 5;
 constexpr unsigned int PRINT_RATE   = 20;
 constexpr float COMMAND_RAMP_RATE_PCT_PER_SEC = 25.0f;
 constexpr uint8_t CMD_BUFFER_SIZE = 32;
+constexpr uint16_t PWM_TOP_VALUE = 1999;
 
 // --- EMA smoothing (0.0 = max smooth, 1.0 = no smoothing) ---
 constexpr float EMA_ALPHA = 0.8f;
@@ -76,6 +77,7 @@ float lookupCurve(float travel) {
 void travelToDuty(float travel, float &s2duty, float &s4duty) {
   float t = constrain(travel, 0.0f, 100.0f) / 100.0f;
   s2duty = S2_REST + t * (S2_FULL - S2_REST);
+  // Complementary outputs: S2 + S4 must always equal 100%.
   s4duty = 100.0f - s2duty;
 }
 
@@ -239,9 +241,9 @@ void setup() {
   pinMode(PIN_S2_OUT, OUTPUT);
   TCCR1A = _BV(COM1A1) | _BV(COM1B1) | _BV(WGM11);
   TCCR1B = _BV(WGM13)  | _BV(WGM12)  | _BV(CS11);
-  ICR1   = 1999;
-  OCR1A  = (uint16_t)((100.0f - S2_REST) / 100.0f * 1999.0f);
-  OCR1B  = (uint16_t)(S2_REST / 100.0f * 1999.0f);
+  ICR1   = PWM_TOP_VALUE;
+  OCR1A  = (uint16_t)((100.0f - S2_REST) / 100.0f * PWM_TOP_VALUE);
+  OCR1B  = (uint16_t)(S2_REST / 100.0f * PWM_TOP_VALUE);
 
   attachInterrupt(digitalPinToInterrupt(PIN_S2_IN), isr_s2, CHANGE);
 
@@ -306,8 +308,8 @@ void loop() {
       s2out = s2;
       s4out = 100.0f - s2out;
     }
-    OCR1A = (uint16_t)constrain(s4out / 100.0f * 1999.0f, 0, 1999);
-    OCR1B = (uint16_t)constrain(s2out / 100.0f * 1999.0f, 0, 1999);
+    OCR1A = (uint16_t)constrain(s4out / 100.0f * PWM_TOP_VALUE, 0, PWM_TOP_VALUE);
+    OCR1B = (uint16_t)constrain(s2out / 100.0f * PWM_TOP_VALUE, 0, PWM_TOP_VALUE);
     timerPwmSet = now;
   }
 
