@@ -202,7 +202,7 @@ void processSerialCommand(const char *line) {
   }
 
   char *endPtr = nullptr;
-  float requestedTravel = strtof(parseStart, &endPtr);
+  float requestedTravel = (float)strtod(parseStart, &endPtr);
   if (endPtr != parseStart) {
     while (*endPtr == ' ' || *endPtr == '\t') endPtr++;
     if (*endPtr == '\0') {
