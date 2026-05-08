@@ -76,7 +76,7 @@ float lookupCurve(float travel) {
 void travelToDuty(float travel, float &s2duty, float &s4duty) {
   float t = constrain(travel, 0.0f, 100.0f) / 100.0f;
   s2duty = S2_REST + t * (S2_FULL - S2_REST);
-  s4duty = constrain(100.0f - s2duty, 0.0f, 100.0f);
+  s4duty = 100.0f - s2duty;
 }
 
 // -------------------------------------------------------
@@ -304,7 +304,7 @@ void loop() {
       travelToDuty(commandCurrentTravel, s2out, s4out);
     } else {
       s2out = s2;
-      s4out = constrain(100.0f - s2out, 0.0f, 100.0f);
+      s4out = 100.0f - s2out;
     }
     OCR1A = (uint16_t)constrain(s4out / 100.0f * 1999.0f, 0, 1999);
     OCR1B = (uint16_t)constrain(s2out / 100.0f * 1999.0f, 0, 1999);
