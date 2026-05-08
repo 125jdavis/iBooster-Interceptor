@@ -282,7 +282,7 @@ void setup() {
   manualOverride = true;
   setMode(Mode::PASSTHROUGH);
 
-  Serial.println("# PASSTHRU LOCKED: S2-only measurement mode");
+  Serial.println("# PASSTHROUGH LOCKED: S2-only measurement mode");
   Serial.println("s2_high\ts2_period\tmode");
 }
 
@@ -314,7 +314,7 @@ void loop() {
     }
     Serial.print(s2ht);   Serial.print("\t");
     Serial.print(s2per);  Serial.print("\t");
-    Serial.println("PASSTHRU_LOCK");
+    Serial.println("PASSTHROUGH_LOCK");
     timerPrint = now;
   }
 }
