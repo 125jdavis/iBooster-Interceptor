@@ -22,20 +22,20 @@ constexpr unsigned long PWM_PERIOD_MIN = 900UL;   // reject periods outside
 constexpr unsigned long PWM_PERIOD_MAX = 1100UL;  // this window (~10% tolerance)
 
 // --- Update rates ---
-constexpr unsigned int PWM_SET_RATE = 5;
+constexpr unsigned int PWM_SET_RATE = 2;
 constexpr unsigned int PRINT_RATE   = 20;
 constexpr float COMMAND_RAMP_RATE_PCT_PER_SEC = 25.0f;
 constexpr uint8_t CMD_BUFFER_SIZE = 32;
 constexpr uint16_t PWM_TOP_VALUE = 1999;
 
 // --- EMA smoothing (0.0 = max smooth, 1.0 = no smoothing) ---
-constexpr float EMA_ALPHA = 0.8f;
+constexpr float EMA_ALPHA = 0.1f;
 
 // --- Calibration curve ---
 constexpr uint8_t CAL_POINTS = 6;
 constexpr float CAL_IN[CAL_POINTS]  = {  0.0f, 20.0f, 40.0f, 60.0f,  80.0f, 100.0f };
-//constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 12.0f, 24.0f, 36.0f,  48.0f,  60.0f };
-constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 20.0f, 40.0f, 60.0f,  80.0f, 100.0f };
+constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 6.0f, 20.0f, 32.0f,  48.0f,  60.0f };
+//constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 20.0f, 40.0f, 60.0f,  80.0f, 100.0f };
 // --- State ---
 enum class Mode { PASSTHROUGH, ACTIVE, COMMAND };
 volatile Mode mode = Mode::PASSTHROUGH;
