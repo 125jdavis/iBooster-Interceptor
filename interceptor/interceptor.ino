@@ -100,7 +100,7 @@ void isr_s2() {
   } else if (s2_valid && s2_last_period > 0) {
     unsigned long highTime = now - rise_s2;
     if (highTime > 0UL && highTime < s2_last_period) {
-      s2_highTime = highTime;  // capture for printing
+      s2_highTime = highTime;
       float raw = (float)highTime / (float)s2_last_period * 100.0f;
       s2inputDuty = EMA_ALPHA * raw + (1.0f - EMA_ALPHA) * s2inputDuty;
     }
@@ -254,8 +254,7 @@ void setup() {
 
   Serial.println("# Commands: P=passthrough  A=active  C=command  R=resume auto");
   Serial.println("# Command target: send 0..100 (or 'c <value>'), ramps at 25%/sec");
-  // Serial.println("s2\ts4\tmode");
-  Serial.println("s2_high\ts2_period\tmode");
+  Serial.println("pedal_in_pct\tpedal_out_pct\tmode");
 }
 
 // -------------------------------------------------------
@@ -271,6 +270,7 @@ void loop() {
     s2 = s2inputDuty;
   }
   float travel = computeTravelFromS2(s2);
+  float reportedTravel = travel;
   unsigned long now = millis();
   float dtSec = (now - commandLastUpdateAt) / 1000.0f;
   commandLastUpdateAt = now;
@@ -298,14 +298,19 @@ void loop() {
     }
   }
 
+  if (mode == Mode::ACTIVE) {
+    reportedTravel = lookupCurve(travel);
+  } else if (mode == Mode::COMMAND) {
+    reportedTravel = commandCurrentTravel;
+  }
+
   // --- PWM output update ---
   if (now - timerPwmSet >= PWM_SET_RATE) {
     float s2out, s4out;
     if (mode == Mode::ACTIVE) {
-      float spoofTravel = lookupCurve(travel);
-      travelToDuty(spoofTravel, s2out, s4out);
+      travelToDuty(reportedTravel, s2out, s4out);
     } else if (mode == Mode::COMMAND) {
-      travelToDuty(commandCurrentTravel, s2out, s4out);
+      travelToDuty(reportedTravel, s2out, s4out);
     } else {
       s2out = s2;
       s4out = 100.0f - s2out;
@@ -317,13 +322,8 @@ void loop() {
 
   // --- Serial output ---
   if (now - timerPrint >= PRINT_RATE) {
-    unsigned long s2ht, s2per;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-      s2ht  = s2_highTime;
-      s2per = s2_last_period;
-    }
-    Serial.print(s2ht);   Serial.print("\t");
-    Serial.print(s2per);  Serial.print("\t");
+    Serial.print(travel, 1);         Serial.print("\t");
+    Serial.print(reportedTravel, 1); Serial.print("\t");
     if (mode == Mode::ACTIVE) {
       Serial.println("ACTIVE");
     } else if (mode == Mode::COMMAND) {
