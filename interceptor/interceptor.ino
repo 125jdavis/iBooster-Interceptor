@@ -35,7 +35,7 @@ constexpr float EMA_ALPHA = 0.1f;
 constexpr uint8_t CAL_POINTS = 6;
 constexpr float CAL_IN[CAL_POINTS]  = {  0.0f, 20.0f, 40.0f, 60.0f,  80.0f, 100.0f };
 //constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 6.0f, 20.0f, 32.0f,  48.0f,  60.0f };
-constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 12.0f, 24.0f, 36.0f,  48.0f, 64.0f };
+constexpr float CAL_OUT[CAL_POINTS] = {  0.0f, 19.0f, 36.0f, 54.0f,  72.0f, 90.0f };
 //constexpr float CAL_OUT[CAL_POINTS]  = {  0.0f, 20.0f, 40.0f, 60.0f,  80.0f, 100.0f };
 
 // --- State ---
