@@ -25,13 +25,13 @@ void MX_IWDG_Init(void);
 static volatile bool control_tick_pending;
 
 static functional_mode_t requested_mode = FUNCTIONAL_MODE_PASSTHROUGH;
-static bool manual_override;
-static control_command_state_t command_state;
+static bool manual_override = false;
+static control_command_state_t command_state = { 0.0f, 0.0f };
 static control_filter_state_t filter_state;
 static safety_state_t safety_state;
 static telemetry_snapshot_t telemetry_snapshot;
-static uint32_t rest_hold_elapsed_ms;
-static uint32_t last_telemetry_ms;
+static uint32_t rest_hold_elapsed_ms = 0U;
+static uint32_t last_telemetry_ms = 0U;
 
 static float duty_from_capture(const pwm_capture_snapshot_t *capture, bool *valid)
 {
@@ -203,6 +203,7 @@ int main(void)
     HAL_TIM_Base_Start_IT(&htim10);
 
     set_level_shifter(true);
+    last_telemetry_ms = HAL_GetTick();
     serial_cli_print_banner();
 
     while (1) {
