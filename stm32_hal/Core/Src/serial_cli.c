@@ -7,9 +7,9 @@
 #include "app_config.h"
 #include "control.h"
 
-static char command_buffer[SERIAL_CMD_BUFFER_SIZE];
-static uint32_t command_length;
-static bool discarding_long_command;
+static char command_buffer[SERIAL_CMD_BUFFER_SIZE]; /* accumulates the current command line from UART input */
+static uint32_t command_length; /* number of valid characters currently stored in the command buffer */
+static bool discarding_long_command; /* true while ignoring an overlength command until newline */
 
 /* Writes raw text to the CLI transport backend. */
 static void transport_write_string(const char *text)
@@ -114,7 +114,7 @@ static void process_command(const char *line,
         return;
     }
 
-    const char *parse_start = line;
+    const char *parse_start = line; /* first character to interpret as a numeric command payload */
     if ((*parse_start == 'c') || (*parse_start == 'C')) {
         ++parse_start;
         while ((*parse_start == ' ') || (*parse_start == '\t')) {
@@ -122,14 +122,14 @@ static void process_command(const char *line,
         }
     }
 
-    char *end_ptr = NULL;
-    const float requested_travel = strtof(parse_start, &end_ptr);
+    char *end_ptr = NULL; /* points to the first character left after numeric parsing */
+    const float requested_travel = strtof(parse_start, &end_ptr); /* requested command-mode travel percentage */
     if (end_ptr != parse_start) {
         while ((*end_ptr == ' ') || (*end_ptr == '\t')) {
             ++end_ptr;
         }
         if (*end_ptr == '\0') {
-            char response[48];
+            char response[48]; /* formatted acknowledgment returned to the serial console */
 
             *manual_override = true;
             enter_command_mode(requested_mode, command_state);
@@ -156,11 +156,11 @@ void serial_cli_poll(functional_mode_t *requested_mode,
                      control_command_state_t *command_state,
                      bool *reset_auto_state)
 {
-    uint8_t byte;
+    uint8_t byte; /* raw byte fetched from the transport layer */
 
     *reset_auto_state = false;
     while (serial_cli_transport_read(&byte) != 0) {
-        const char character = (char)byte;
+        const char character = (char)byte; /* current input byte interpreted as an ASCII character */
         if (character == '\r') {
             continue;
         }
@@ -200,7 +200,7 @@ void serial_cli_print_banner(void)
 /* Formats and emits one tab-delimited telemetry sample line. */
 void serial_cli_write_telemetry(const telemetry_snapshot_t *snapshot)
 {
-    char line[256];
+    char line[256]; /* formatted telemetry row written to the serial transport */
 
     (void)snprintf(line,
                    sizeof(line),

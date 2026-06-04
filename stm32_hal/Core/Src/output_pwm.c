@@ -6,9 +6,9 @@
 /* Converts duty percentage to a timer compare value using current ARR limits. */
 static uint32_t compare_from_duty_pct(TIM_HandleTypeDef *htim, float duty_pct)
 {
-    const uint32_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
-    const float clamped_duty = control_clamp_pct(duty_pct);
-    const float scaled = (clamped_duty / 100.0f) * (float)(arr + 1U);
+    const uint32_t arr = __HAL_TIM_GET_AUTORELOAD(htim); /* timer auto-reload value that sets PWM resolution */
+    const float clamped_duty = control_clamp_pct(duty_pct); /* requested duty constrained to the valid range */
+    const float scaled = (clamped_duty / 100.0f) * (float)(arr + 1U); /* floating-point compare value before clamping */
 
     if (scaled <= 0.0f) {
         return 0U;

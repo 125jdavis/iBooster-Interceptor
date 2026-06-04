@@ -10,10 +10,10 @@
 #include "safety.h"
 #include "serial_cli.h"
 
-extern TIM_HandleTypeDef htim2;
-extern TIM_HandleTypeDef htim3;
-extern TIM_HandleTypeDef htim10;
-extern IWDG_HandleTypeDef hiwdg;
+extern TIM_HandleTypeDef htim2; /* free-running timestamp timer for input capture */
+extern TIM_HandleTypeDef htim3; /* dual-channel PWM output timer */
+extern TIM_HandleTypeDef htim10; /* periodic control-loop scheduler timer */
+extern IWDG_HandleTypeDef hiwdg; /* watchdog refreshed by the main control loop */
 
 void SystemClock_Config(void);
 void MX_GPIO_Init(void);
@@ -22,16 +22,16 @@ void MX_TIM3_Init(void);
 void MX_TIM10_Init(void);
 void MX_IWDG_Init(void);
 
-static volatile bool control_tick_pending;
+static volatile bool control_tick_pending; /* set by TIM10 ISR when a control update is due */
 
-static functional_mode_t requested_mode = FUNCTIONAL_MODE_PASSTHROUGH;
-static bool manual_override = false;
-static control_command_state_t command_state = { 0.0f, 0.0f };
-static control_filter_state_t filter_state;
-static safety_state_t safety_state;
-static telemetry_snapshot_t telemetry_snapshot;
-static uint32_t rest_hold_elapsed_ms = 0U;
-static uint32_t last_telemetry_ms = 0U;
+static functional_mode_t requested_mode = FUNCTIONAL_MODE_PASSTHROUGH; /* currently requested operating mode */
+static bool manual_override = false; /* true when CLI has overridden automatic mode switching */
+static control_command_state_t command_state = { 0.0f, 0.0f }; /* command-mode target and ramp progress */
+static control_filter_state_t filter_state; /* filtered duty-cycle measurements for both pedal channels */
+static safety_state_t safety_state; /* current safety state machine data and fault flags */
+static telemetry_snapshot_t telemetry_snapshot; /* latest telemetry sample published to the CLI */
+static uint32_t rest_hold_elapsed_ms = 0U; /* accumulated rest time before auto-enabling active mode */
+static uint32_t last_telemetry_ms = 0U; /* timestamp of the most recent telemetry print */
 
 /* Converts a validated PWM capture snapshot into duty-cycle percentage. */
 static float duty_from_capture(const pwm_capture_snapshot_t *capture, bool *valid)
@@ -98,20 +98,20 @@ static void update_telemetry(const pwm_capture_snapshot_t *s2_capture,
 /* Executes one 1 kHz control iteration from input sampling through output update. */
 static void run_control_tick(void)
 {
-    pwm_capture_snapshot_t s2_capture;
-    pwm_capture_snapshot_t s4_capture;
-    bool s2_valid;
-    bool s4_valid;
-    const uint32_t now_ms = HAL_GetTick();
-    uint32_t now_us;
-    float raw_s2_pct;
-    float raw_s4_pct;
-    float travel_pct;
-    float plausibility_error_pct;
-    float output_s2_pct;
-    float output_s4_pct;
-    bool s2_fresh;
-    bool s4_fresh;
+    pwm_capture_snapshot_t s2_capture; /* latest copied capture state for the S2 input */
+    pwm_capture_snapshot_t s4_capture; /* latest copied capture state for the S4 input */
+    bool s2_valid; /* true when the S2 capture converts into a usable duty cycle */
+    bool s4_valid; /* true when the S4 capture converts into a usable duty cycle */
+    const uint32_t now_ms = HAL_GetTick(); /* current millisecond tick used for telemetry scheduling */
+    uint32_t now_us; /* current microsecond timer count used for freshness checks */
+    float raw_s2_pct; /* raw S2 duty cycle derived from the latest capture snapshot */
+    float raw_s4_pct; /* raw S4 duty cycle derived from the latest capture snapshot */
+    float travel_pct; /* normalized pedal travel computed from filtered sensor duties */
+    float plausibility_error_pct; /* summed sensor mismatch used by the safety plausibility check */
+    float output_s2_pct; /* commanded S2 output duty after mode and safety selection */
+    float output_s4_pct; /* commanded S4 output duty after mode and safety selection */
+    bool s2_fresh; /* true when S2 has a recent valid sample */
+    bool s4_fresh; /* true when S4 has a recent valid sample */
 
     /* Snapshot raw input captures and convert them into duty-cycle percentages. */
     input_capture_copy_snapshot(&s2_capture, &s4_capture);
@@ -164,7 +164,7 @@ static void run_control_tick(void)
         output_s2_pct = S2_REST_DUTY_PCT;
         output_s4_pct = S4_REST_DUTY_PCT;
     } else if (requested_mode == FUNCTIONAL_MODE_ACTIVE) {
-        const float spoof_travel_pct = control_lookup_curve_pct(travel_pct);
+        const float spoof_travel_pct = control_lookup_curve_pct(travel_pct); /* remapped travel for assisted output */
         control_travel_to_duty_pct(spoof_travel_pct, &output_s2_pct, &output_s4_pct);
     } else if (requested_mode == FUNCTIONAL_MODE_COMMAND) {
         control_travel_to_duty_pct(command_state.current_travel_pct, &output_s2_pct, &output_s4_pct);
@@ -228,7 +228,7 @@ int main(void)
 
     /* Poll CLI continuously and run the control task when tick flag is set. */
     while (1) {
-        bool reset_auto_state = false;
+        bool reset_auto_state = false; /* requests reset of zero-detect auto-activation timing */
 
         serial_cli_poll(&requested_mode, &manual_override, &command_state, &reset_auto_state);
         if (reset_auto_state) {

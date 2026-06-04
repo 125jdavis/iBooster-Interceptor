@@ -5,17 +5,17 @@
 #include "app_config.h"
 #include "board_pins.h"
 
-extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim2; /* free-running timer used as the microsecond timestamp source */
 
 typedef struct {
-    volatile pwm_capture_snapshot_t snapshot;
+    volatile pwm_capture_snapshot_t snapshot; /* latest timing and validity data for one input channel */
 } pwm_capture_channel_t;
 
-static pwm_capture_channel_t s2_channel;
-static pwm_capture_channel_t s4_channel;
-static volatile uint32_t total_edge_count;
-static volatile uint32_t total_rejected_periods;
-static volatile uint32_t total_rejected_pulses;
+static pwm_capture_channel_t s2_channel; /* capture state for the S2 pedal input */
+static pwm_capture_channel_t s4_channel; /* capture state for the S4 pedal input */
+static volatile uint32_t total_edge_count; /* diagnostic count of all processed EXTI edges */
+static volatile uint32_t total_rejected_periods; /* diagnostic count of out-of-range PWM periods */
+static volatile uint32_t total_rejected_pulses; /* diagnostic count of invalid high-pulse widths */
 
 /* Clears all captured timing fields for one PWM input channel. */
 static void reset_channel(pwm_capture_channel_t *channel)
@@ -26,7 +26,7 @@ static void reset_channel(pwm_capture_channel_t *channel)
 /* Processes one EXTI edge to update captured period/high-time measurements. */
 static void handle_edge(pwm_capture_channel_t *channel, GPIO_TypeDef *gpio_port, uint16_t gpio_pin, uint32_t now_us)
 {
-    const GPIO_PinState pin_state = HAL_GPIO_ReadPin(gpio_port, gpio_pin);
+    const GPIO_PinState pin_state = HAL_GPIO_ReadPin(gpio_port, gpio_pin); /* sampled logic level after the interrupt edge */
 
     channel->snapshot.last_edge_us = now_us;
     channel->snapshot.edge_count++;
@@ -34,7 +34,7 @@ static void handle_edge(pwm_capture_channel_t *channel, GPIO_TypeDef *gpio_port,
 
     if (pin_state == GPIO_PIN_SET) {
         if (channel->snapshot.last_rise_us != 0U) {
-            const uint32_t period_us = now_us - channel->snapshot.last_rise_us;
+            const uint32_t period_us = now_us - channel->snapshot.last_rise_us; /* elapsed time since the previous rising edge */
             if ((period_us >= PWM_PERIOD_MIN_US) && (period_us <= PWM_PERIOD_MAX_US)) {
                 channel->snapshot.period_us = period_us;
             } else {
@@ -51,7 +51,7 @@ static void handle_edge(pwm_capture_channel_t *channel, GPIO_TypeDef *gpio_port,
         return;
     }
 
-    const uint32_t high_us = now_us - channel->snapshot.last_rise_us;
+    const uint32_t high_us = now_us - channel->snapshot.last_rise_us; /* measured pulse high time for the current PWM cycle */
     if ((high_us > 0U) && (high_us < channel->snapshot.period_us)) {
         channel->snapshot.last_fall_us = now_us;
         channel->snapshot.high_us = high_us;
@@ -79,7 +79,7 @@ void input_capture_init(void)
 /* Routes GPIO interrupt edges to their corresponding S2/S4 capture channels. */
 void input_capture_handle_gpio_exti(uint16_t gpio_pin)
 {
-    const uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2);
+    const uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2); /* timestamp captured at interrupt entry */
 
     if (gpio_pin == S2_IN_Pin) {
         handle_edge(&s2_channel, S2_IN_GPIO_Port, S2_IN_Pin, now_us);
