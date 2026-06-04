@@ -1,5 +1,5 @@
 #ifndef INPUT_CAPTURE_H
-#define INPUT_CAPTURE_H
+#define INPUT_CAPTURE_H /* Include guard for input_capture.h */
 
 #include <stdbool.h>
 #include <stdint.h>

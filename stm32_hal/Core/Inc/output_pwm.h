@@ -1,5 +1,5 @@
 #ifndef OUTPUT_PWM_H
-#define OUTPUT_PWM_H
+#define OUTPUT_PWM_H /* Include guard for output_pwm.h */
 
 #include "main.h"
 

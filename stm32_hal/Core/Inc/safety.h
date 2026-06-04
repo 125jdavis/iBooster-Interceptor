@@ -1,5 +1,5 @@
 #ifndef SAFETY_H
-#define SAFETY_H
+#define SAFETY_H /* Include guard for safety.h */
 
 #include <stdbool.h>
 #include <stdint.h>

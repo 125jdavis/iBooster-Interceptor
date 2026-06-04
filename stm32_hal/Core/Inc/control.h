@@ -1,5 +1,5 @@
 #ifndef CONTROL_H
-#define CONTROL_H
+#define CONTROL_H /* Include guard for control.h */
 
 #include <stdbool.h>
 

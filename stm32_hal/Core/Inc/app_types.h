@@ -1,5 +1,5 @@
 #ifndef APP_TYPES_H
-#define APP_TYPES_H
+#define APP_TYPES_H /* Include guard for app_types.h */
 
 #include <stdbool.h>
 #include <stdint.h>

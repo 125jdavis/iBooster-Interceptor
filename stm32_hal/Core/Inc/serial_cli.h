@@ -1,5 +1,5 @@
 #ifndef SERIAL_CLI_H
-#define SERIAL_CLI_H
+#define SERIAL_CLI_H /* Include guard for serial_cli.h */
 
 #include <stdbool.h>
 #include <stdint.h>
