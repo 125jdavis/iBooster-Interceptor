@@ -17,11 +17,13 @@ static volatile uint32_t total_edge_count;
 static volatile uint32_t total_rejected_periods;
 static volatile uint32_t total_rejected_pulses;
 
+/* Clears all captured timing fields for one PWM input channel. */
 static void reset_channel(pwm_capture_channel_t *channel)
 {
     memset((void *)&channel->snapshot, 0, sizeof(channel->snapshot));
 }
 
+/* Processes one EXTI edge to update captured period/high-time measurements. */
 static void handle_edge(pwm_capture_channel_t *channel, GPIO_TypeDef *gpio_port, uint16_t gpio_pin, uint32_t now_us)
 {
     const GPIO_PinState pin_state = HAL_GPIO_ReadPin(gpio_port, gpio_pin);
@@ -62,6 +64,7 @@ static void handle_edge(pwm_capture_channel_t *channel, GPIO_TypeDef *gpio_port,
     }
 }
 
+/* Resets capture channels and diagnostics counters at startup. */
 void input_capture_init(void)
 {
     __disable_irq();
@@ -73,6 +76,7 @@ void input_capture_init(void)
     __enable_irq();
 }
 
+/* Routes GPIO interrupt edges to their corresponding S2/S4 capture channels. */
 void input_capture_handle_gpio_exti(uint16_t gpio_pin)
 {
     const uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2);
@@ -84,6 +88,7 @@ void input_capture_handle_gpio_exti(uint16_t gpio_pin)
     }
 }
 
+/* Copies latest channel snapshots atomically for control-loop consumption. */
 void input_capture_copy_snapshot(pwm_capture_snapshot_t *s2, pwm_capture_snapshot_t *s4)
 {
     __disable_irq();
@@ -94,21 +99,25 @@ void input_capture_copy_snapshot(pwm_capture_snapshot_t *s2, pwm_capture_snapsho
     __enable_irq();
 }
 
+/* Returns the current microsecond timestamp from the free-running timer. */
 uint32_t input_capture_get_timestamp_us(void)
 {
     return __HAL_TIM_GET_COUNTER(&htim2);
 }
 
+/* Returns cumulative EXTI edge count across both input channels. */
 uint32_t input_capture_get_total_edge_count(void)
 {
     return total_edge_count;
 }
 
+/* Returns cumulative count of rejected period measurements. */
 uint32_t input_capture_get_total_rejected_periods(void)
 {
     return total_rejected_periods;
 }
 
+/* Returns cumulative count of rejected high-pulse measurements. */
 uint32_t input_capture_get_total_rejected_pulses(void)
 {
     return total_rejected_pulses;

@@ -4,6 +4,7 @@
 
 #include "app_config.h"
 
+/* Latches a fault condition and forces the system into fail-safe state. */
 static void latch_fault(safety_state_t *state, uint32_t fault_bit)
 {
     state->fault_bits |= fault_bit;
@@ -11,6 +12,7 @@ static void latch_fault(safety_state_t *state, uint32_t fault_bit)
     state->state = SYSTEM_STATE_FAULT_LATCHED;
 }
 
+/* Initializes all safety-state fields to conservative boot defaults. */
 void safety_init(safety_state_t *state)
 {
     state->state = SYSTEM_STATE_BOOT;
@@ -24,11 +26,13 @@ void safety_init(safety_state_t *state)
     state->level_shifter_enabled = false;
 }
 
+/* Tracks whether the output level shifter is currently enabled. */
 void safety_set_level_shifter_enabled(safety_state_t *state, bool enabled)
 {
     state->level_shifter_enabled = enabled;
 }
 
+/* Evaluates startup, validity, plausibility, and mode rules to command safety outputs. */
 void safety_update(safety_state_t *state,
                    functional_mode_t requested_mode,
                    bool inputs_valid,
@@ -104,11 +108,13 @@ void safety_update(safety_state_t *state,
     }
 }
 
+/* Returns true when any safety fault has been latched. */
 bool safety_fault_latched(const safety_state_t *state)
 {
     return state->fault_bits != FAULT_NONE;
 }
 
+/* Returns true when relay engagement is allowed by current safety state. */
 bool safety_relay_allowed(const safety_state_t *state)
 {
     return state->relay_commanded_on && !safety_fault_latched(state) && state->startup_complete;

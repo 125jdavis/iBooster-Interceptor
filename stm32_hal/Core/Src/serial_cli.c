@@ -11,17 +11,20 @@ static char command_buffer[SERIAL_CMD_BUFFER_SIZE];
 static uint32_t command_length;
 static bool discarding_long_command;
 
+/* Writes raw text to the CLI transport backend. */
 static void transport_write_string(const char *text)
 {
     serial_cli_transport_write((const uint8_t *)text, (uint16_t)strlen(text));
 }
 
+/* Writes one CRLF-terminated line to the CLI transport. */
 static void write_line(const char *text)
 {
     transport_write_string(text);
     transport_write_string("\r\n");
 }
 
+/* Returns a short display label for each functional operating mode. */
 const char *serial_cli_mode_name(functional_mode_t mode)
 {
     switch (mode) {
@@ -35,6 +38,7 @@ const char *serial_cli_mode_name(functional_mode_t mode)
     }
 }
 
+/* Returns a short display label for each system safety state. */
 const char *serial_cli_state_name(system_state_t state)
 {
     switch (state) {
@@ -55,6 +59,7 @@ const char *serial_cli_state_name(system_state_t state)
     }
 }
 
+/* Switches into command mode and resets ramp state on first entry. */
 static void enter_command_mode(functional_mode_t *requested_mode,
                                control_command_state_t *command_state)
 {
@@ -64,6 +69,7 @@ static void enter_command_mode(functional_mode_t *requested_mode,
     *requested_mode = FUNCTIONAL_MODE_COMMAND;
 }
 
+/* Parses one received CLI line and applies mode/target commands. */
 static void process_command(const char *line,
                             functional_mode_t *requested_mode,
                             bool *manual_override,
@@ -137,12 +143,14 @@ static void process_command(const char *line,
     write_line("# Unknown command");
 }
 
+/* Initializes command parser state for a fresh serial session. */
 void serial_cli_init(void)
 {
     command_length = 0U;
     discarding_long_command = false;
 }
 
+/* Consumes serial bytes, assembles lines, and dispatches parsed commands. */
 void serial_cli_poll(functional_mode_t *requested_mode,
                      bool *manual_override,
                      control_command_state_t *command_state,
@@ -181,6 +189,7 @@ void serial_cli_poll(functional_mode_t *requested_mode,
     }
 }
 
+/* Prints startup help and telemetry column headers. */
 void serial_cli_print_banner(void)
 {
     write_line("# Commands: P=passthrough  A=active  C=command  R=resume auto");
@@ -188,6 +197,7 @@ void serial_cli_print_banner(void)
     write_line("state\tmode\trelay\tlvl\ts2_high\ts2_period\ts2_duty\ts4_high\ts4_period\ts4_duty\ttravel\tplaus\tfaults");
 }
 
+/* Formats and emits one tab-delimited telemetry sample line. */
 void serial_cli_write_telemetry(const telemetry_snapshot_t *snapshot)
 {
     char line[256];
@@ -211,12 +221,14 @@ void serial_cli_write_telemetry(const telemetry_snapshot_t *snapshot)
     transport_write_string(line);
 }
 
+/* Default weak transport read stub for integration override. */
 __attribute__((weak)) int serial_cli_transport_read(uint8_t *byte)
 {
     (void)byte;
     return 0;
 }
 
+/* Default weak transport write stub for integration override. */
 __attribute__((weak)) void serial_cli_transport_write(const uint8_t *data, uint16_t length)
 {
     (void)data;

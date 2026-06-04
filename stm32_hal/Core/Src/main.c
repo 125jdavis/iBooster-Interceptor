@@ -33,6 +33,7 @@ static telemetry_snapshot_t telemetry_snapshot;
 static uint32_t rest_hold_elapsed_ms = 0U;
 static uint32_t last_telemetry_ms = 0U;
 
+/* Converts a validated PWM capture snapshot into duty-cycle percentage. */
 static float duty_from_capture(const pwm_capture_snapshot_t *capture, bool *valid)
 {
     if (!capture->valid || (capture->period_us == 0U) || (capture->high_us >= capture->period_us)) {
@@ -44,11 +45,13 @@ static float duty_from_capture(const pwm_capture_snapshot_t *capture, bool *vali
     return ((float)capture->high_us * 100.0f) / (float)capture->period_us;
 }
 
+/* Drives relay GPIO to either active interception or passthrough state. */
 static void set_relay(bool enabled)
 {
     HAL_GPIO_WritePin(RELAY_GPIO_Port, RELAY_Pin, enabled ? RELAY_ACTIVE_STATE : RELAY_INACTIVE_STATE);
 }
 
+/* Controls the level shifter power state and mirrors status into safety state. */
 static void set_level_shifter(bool enabled)
 {
     HAL_GPIO_WritePin(LEVEL_SHIFTER_GPIO_Port,
@@ -57,6 +60,7 @@ static void set_level_shifter(bool enabled)
     safety_set_level_shifter_enabled(&safety_state, enabled);
 }
 
+/* Populates the telemetry structure with the latest measured and derived values. */
 static void update_telemetry(const pwm_capture_snapshot_t *s2_capture,
                              const pwm_capture_snapshot_t *s4_capture,
                              bool s2_valid,
@@ -91,6 +95,7 @@ static void update_telemetry(const pwm_capture_snapshot_t *s2_capture,
     telemetry_snapshot.exti_edges = input_capture_get_total_edge_count();
 }
 
+/* Executes one 1 kHz control iteration from input sampling through output update. */
 static void run_control_tick(void)
 {
     pwm_capture_snapshot_t s2_capture;
@@ -108,18 +113,22 @@ static void run_control_tick(void)
     bool s2_fresh;
     bool s4_fresh;
 
+    /* Snapshot raw input captures and convert them into duty-cycle percentages. */
     input_capture_copy_snapshot(&s2_capture, &s4_capture);
     now_us = input_capture_get_timestamp_us();
     raw_s2_pct = duty_from_capture(&s2_capture, &s2_valid);
     raw_s4_pct = duty_from_capture(&s4_capture, &s4_valid);
 
+    /* Determine whether each channel has recent valid data within stale timeout. */
     s2_fresh = s2_valid && ((now_us - s2_capture.last_valid_us) <= (INPUT_STALE_TIMEOUT_MS * 1000U));
     s4_fresh = s4_valid && ((now_us - s4_capture.last_valid_us) <= (INPUT_STALE_TIMEOUT_MS * 1000U));
 
+    /* Filter inputs and derive travel/plausibility terms used by control and safety. */
     control_update_filtered_duties(&filter_state, raw_s2_pct, s2_valid, raw_s4_pct, s4_valid);
     travel_pct = control_compute_travel_pct(filter_state.s2_filtered_pct, filter_state.s4_filtered_pct);
     plausibility_error_pct = (filter_state.s2_filtered_pct + filter_state.s4_filtered_pct) - 100.0f;
 
+    /* Auto-promote from passthrough to active mode after sustained pedal rest. */
     if (!manual_override && (requested_mode == FUNCTIONAL_MODE_PASSTHROUGH)) {
         if (control_pedal_at_rest(travel_pct)) {
             if (rest_hold_elapsed_ms < REST_HOLD_MS) {
@@ -133,10 +142,12 @@ static void run_control_tick(void)
         }
     }
 
+    /* Advance command-mode ramp toward the operator-requested travel target. */
     if (requested_mode == FUNCTIONAL_MODE_COMMAND) {
         control_update_command_ramp(&command_state, 1.0f / (float)CONTROL_TICK_HZ);
     }
 
+    /* Update safety state machine before selecting requested output behavior. */
     safety_update(&safety_state,
                   requested_mode,
                   s2_valid && s4_valid && s2_fresh && s4_fresh,
@@ -148,6 +159,7 @@ static void run_control_tick(void)
                   plausibility_error_pct,
                   CONTROL_TICK_MS);
 
+    /* Choose output duties based on fault status and selected functional mode. */
     if (safety_fault_latched(&safety_state)) {
         output_s2_pct = S2_REST_DUTY_PCT;
         output_s4_pct = S4_REST_DUTY_PCT;
@@ -161,6 +173,7 @@ static void run_control_tick(void)
         output_s4_pct = filter_state.s4_filtered_pct;
     }
 
+    /* Apply outputs and capture a telemetry snapshot for periodic diagnostics. */
     output_pwm_set_duty_pct(&htim3, output_s2_pct, output_s4_pct);
     set_relay(safety_relay_allowed(&safety_state));
     update_telemetry(&s2_capture,
@@ -172,14 +185,17 @@ static void run_control_tick(void)
                      travel_pct,
                      plausibility_error_pct);
 
+    /* Emit telemetry at the configured reporting interval. */
     if ((now_ms - last_telemetry_ms) >= TELEMETRY_PRINT_INTERVAL_MS) {
         serial_cli_write_telemetry(&telemetry_snapshot);
         last_telemetry_ms = now_ms;
     }
 }
 
+/* Initializes MCU peripherals and runs the foreground loop scheduler. */
 int main(void)
 {
+    /* Initialize HAL, clocks, and generated peripheral instances. */
     HAL_Init();
     SystemClock_Config();
     MX_GPIO_Init();
@@ -188,24 +204,29 @@ int main(void)
     MX_TIM10_Init();
     MX_IWDG_Init();
 
+    /* Initialize application modules after hardware setup. */
     input_capture_init();
     control_filter_init(&filter_state);
     safety_init(&safety_state);
     serial_cli_init();
 
+    /* Force safe output state before enabling timers and power paths. */
     set_relay(false);
     set_level_shifter(false);
 
+    /* Start timers and drive PWM outputs to safe startup duty values. */
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
     output_pwm_init_safe_state(&htim3);
     HAL_TIM_Base_Start(&htim2);
     HAL_TIM_Base_Start_IT(&htim10);
 
+    /* Enable level shifter and print CLI banner for operator interaction. */
     set_level_shifter(true);
     last_telemetry_ms = HAL_GetTick();
     serial_cli_print_banner();
 
+    /* Poll CLI continuously and run the control task when tick flag is set. */
     while (1) {
         bool reset_auto_state = false;
 
@@ -222,11 +243,13 @@ int main(void)
     }
 }
 
+/* Forwards GPIO EXTI interrupts to the PWM input-capture module. */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     input_capture_handle_gpio_exti(GPIO_Pin);
 }
 
+/* Sets the control tick flag on each TIM10 update interrupt. */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM10) {
