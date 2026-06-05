@@ -194,7 +194,7 @@ void serial_cli_print_banner(void)
 {
     write_line("# Commands: P=passthrough  A=active  C=command  R=resume auto");
     write_line("# Command target: send 0..100 (or 'c <value>'), ramps at 25%/sec");
-    write_line("state\tmode\trelay\tlvl\ts2_high\ts2_period\ts2_duty\ts4_high\ts4_period\ts4_duty\ttravel\tplaus\tfaults");
+    write_line("state\tmode\trelay\tlvl\ts2_high\ts2_period\ts2_duty\ts4_high\ts4_period\ts4_duty\ttravel\tplaus_error\tfaults");
 }
 
 /* Formats and emits one tab-delimited diagnostics sample line. */
