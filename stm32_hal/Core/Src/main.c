@@ -5,6 +5,7 @@
 #include "app_config.h"
 #include "board_pins.h"
 #include "control.h"
+#include "heartbeat.h"
 #include "input_capture.h"
 #include "output_pwm.h"
 #include "safety.h"
@@ -20,6 +21,7 @@ void MX_GPIO_Init(void);
 void MX_TIM2_Init(void);
 void MX_TIM3_Init(void);
 void MX_TIM10_Init(void);
+void MX_USART1_UART_Init(void);
 void MX_IWDG_Init(void);
 
 static volatile bool control_tick_pending; /* set by TIM10 ISR when a control update is due */
@@ -182,6 +184,7 @@ static void run_control_tick(void)
     /* Apply outputs and capture a diagnostic snapshot for periodic reporting. */
     output_pwm_set_duty_pct(&htim3, output_s2_pct, output_s4_pct);
     set_relay(safety_relay_allowed(&safety_state));
+    heartbeat_update(safety_state.state, CONTROL_TICK_MS);
     update_diagnostics(&s2_capture,
                        &s4_capture,
                        s2_valid,
@@ -208,12 +211,14 @@ int main(void)
     MX_TIM2_Init();
     MX_TIM3_Init();
     MX_TIM10_Init();
+    MX_USART1_UART_Init();
     MX_IWDG_Init();
 
     /* Initialize application modules after hardware setup. */
     input_capture_init();
     control_filter_init(&filter_state);
     safety_init(&safety_state);
+    heartbeat_init();
     serial_cli_init();
 
     /* Force safe output state before enabling timers and power paths. */
