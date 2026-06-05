@@ -68,7 +68,7 @@ void safety_update(safety_state_t *state,
     }
 
     if (!s2_valid || !s4_valid) {
-        latch_fault(state, FAULT_INVALID_PERIOD);
+        latch_fault(state, FAULT_INVALID_CAPTURE);
         return;
     }
 

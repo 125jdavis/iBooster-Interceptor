@@ -12,7 +12,7 @@ typedef struct {
     functional_mode_t mode;
     system_state_t state;
     uint32_t fault_bits;
-    bool relay_on;
+    bool relay_commanded_on;
     bool level_shifter_on;
     bool s2_valid;
     bool s4_valid;
@@ -32,7 +32,7 @@ typedef struct {
     uint32_t rejected_pulses;
     uint32_t plausibility_violations;
     uint32_t exti_edges;
-} telemetry_snapshot_t;
+} diagnostic_snapshot_t;
 
 void serial_cli_init(void);
 void serial_cli_poll(functional_mode_t *requested_mode,
@@ -40,7 +40,7 @@ void serial_cli_poll(functional_mode_t *requested_mode,
                      control_command_state_t *command_state,
                      bool *reset_auto_state);
 void serial_cli_print_banner(void);
-void serial_cli_write_telemetry(const telemetry_snapshot_t *snapshot);
+void serial_cli_write_diagnostics(const diagnostic_snapshot_t *snapshot);
 const char *serial_cli_mode_name(functional_mode_t mode);
 const char *serial_cli_state_name(system_state_t state);
 

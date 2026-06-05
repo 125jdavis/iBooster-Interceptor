@@ -23,8 +23,7 @@ enum {
     FAULT_NONE                = 0U,
     FAULT_PLAUSIBILITY        = 1U << 0,
     FAULT_STALE_INPUT         = 1U << 1,
-    FAULT_INVALID_PERIOD      = 1U << 2,
-    FAULT_STARTUP_VALIDATION  = 1U << 3,
+    FAULT_INVALID_CAPTURE     = 1U << 2,
 };
 
 typedef struct {

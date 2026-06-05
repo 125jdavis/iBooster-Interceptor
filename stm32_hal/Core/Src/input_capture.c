@@ -23,7 +23,15 @@ static void reset_channel(pwm_capture_channel_t *channel)
     memset((void *)&channel->snapshot, 0, sizeof(channel->snapshot));
 }
 
-/* Processes one EXTI edge to update captured period/high-time measurements. */
+/* Processes one EXTI edge to update captured period/high-time measurements.
+ *
+ * Edge polarity is inferred by reading the GPIO pin state immediately after the
+ * interrupt fires rather than using separate rising/falling EXTI lines.  This
+ * relies on the pin state already reflecting the new level by the time the ISR
+ * body executes; on the STM32F4 there is enough pipeline latency that this holds
+ * in practice, but it should be bench-validated with a logic analyser before
+ * shipping.  If the pin is still transitioning when sampled, one edge per glitch
+ * can be silently misclassified. */
 static void handle_edge(pwm_capture_channel_t *channel, GPIO_TypeDef *gpio_port, uint16_t gpio_pin, uint32_t now_us)
 {
     const GPIO_PinState pin_state = HAL_GPIO_ReadPin(gpio_port, gpio_pin); /* sampled logic level after the interrupt edge */
@@ -76,7 +84,9 @@ void input_capture_init(void)
     __enable_irq();
 }
 
-/* Routes GPIO interrupt edges to their corresponding S2/S4 capture channels. */
+/* Routes GPIO interrupt edges to their corresponding S2/S4 capture channels.
+ * Edge polarity is determined by reading the pin state inside handle_edge;
+ * see that function for bench-validation notes. */
 void input_capture_handle_gpio_exti(uint16_t gpio_pin)
 {
     const uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2); /* timestamp captured at interrupt entry */

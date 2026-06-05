@@ -19,7 +19,7 @@
 #define PWM_PERIOD_MAX_US                   1100U /* Maximum accepted input PWM period (us) */
 #define CONTROL_TICK_HZ                     1000U /* Control-loop update frequency (Hz) */
 #define CONTROL_TICK_MS                     1U /* Control-loop period (ms) */
-#define TELEMETRY_PRINT_INTERVAL_MS         20U /* Serial telemetry print interval (ms) */
+#define DIAGNOSTIC_PRINT_INTERVAL_MS        20U /* Serial diagnostics print interval (ms) */
 #define COMMAND_RAMP_RATE_PCT_PER_SEC       25.0f /* Commanded travel ramp limit (% per second) */
 #define EMA_ALPHA                           0.8f /* Exponential moving average smoothing factor */
 #define SERIAL_CMD_BUFFER_SIZE              32U /* CLI command input buffer size (bytes) */

@@ -29,9 +29,9 @@ static bool manual_override = false; /* true when CLI has overridden automatic m
 static control_command_state_t command_state = { 0.0f, 0.0f }; /* command-mode target and ramp progress */
 static control_filter_state_t filter_state; /* filtered duty-cycle measurements for both pedal channels */
 static safety_state_t safety_state; /* current safety state machine data and fault flags */
-static telemetry_snapshot_t telemetry_snapshot; /* latest telemetry sample published to the CLI */
+static diagnostic_snapshot_t diagnostic_snapshot; /* latest diagnostic sample published to the CLI */
 static uint32_t rest_hold_elapsed_ms = 0U; /* accumulated rest time before auto-enabling active mode */
-static uint32_t last_telemetry_ms = 0U; /* timestamp of the most recent telemetry print */
+static uint32_t last_diagnostic_ms = 0U; /* timestamp of the most recent diagnostic print */
 
 /* Converts a validated PWM capture snapshot into duty-cycle percentage. */
 static float duty_from_capture(const pwm_capture_snapshot_t *capture, bool *valid)
@@ -60,8 +60,8 @@ static void set_level_shifter(bool enabled)
     safety_set_level_shifter_enabled(&safety_state, enabled);
 }
 
-/* Populates the telemetry structure with the latest measured and derived values. */
-static void update_telemetry(const pwm_capture_snapshot_t *s2_capture,
+/* Populates the diagnostic structure with the latest measured and derived values. */
+static void update_diagnostics(const pwm_capture_snapshot_t *s2_capture,
                              const pwm_capture_snapshot_t *s4_capture,
                              bool s2_valid,
                              bool s4_valid,
@@ -70,29 +70,29 @@ static void update_telemetry(const pwm_capture_snapshot_t *s2_capture,
                              float travel_pct,
                              float plausibility_error_pct)
 {
-    telemetry_snapshot.mode = requested_mode;
-    telemetry_snapshot.state = safety_state.state;
-    telemetry_snapshot.fault_bits = safety_state.fault_bits;
-    telemetry_snapshot.relay_on = safety_relay_allowed(&safety_state);
-    telemetry_snapshot.level_shifter_on = safety_state.level_shifter_enabled;
-    telemetry_snapshot.s2_valid = s2_valid;
-    telemetry_snapshot.s4_valid = s4_valid;
-    telemetry_snapshot.s2_fresh = s2_fresh;
-    telemetry_snapshot.s4_fresh = s4_fresh;
-    telemetry_snapshot.s2_high_us = s2_capture->high_us;
-    telemetry_snapshot.s2_period_us = s2_capture->period_us;
-    telemetry_snapshot.s4_high_us = s4_capture->high_us;
-    telemetry_snapshot.s4_period_us = s4_capture->period_us;
-    telemetry_snapshot.s2_duty_pct = filter_state.s2_filtered_pct;
-    telemetry_snapshot.s4_duty_pct = filter_state.s4_filtered_pct;
-    telemetry_snapshot.travel_pct = travel_pct;
-    telemetry_snapshot.plausibility_error_pct = plausibility_error_pct;
-    telemetry_snapshot.startup_valid_elapsed_ms = safety_state.startup_valid_elapsed_ms;
-    telemetry_snapshot.stale_events = safety_state.stale_events;
-    telemetry_snapshot.rejected_periods = input_capture_get_total_rejected_periods();
-    telemetry_snapshot.rejected_pulses = input_capture_get_total_rejected_pulses();
-    telemetry_snapshot.plausibility_violations = safety_state.plausibility_violations;
-    telemetry_snapshot.exti_edges = input_capture_get_total_edge_count();
+    diagnostic_snapshot.mode = requested_mode;
+    diagnostic_snapshot.state = safety_state.state;
+    diagnostic_snapshot.fault_bits = safety_state.fault_bits;
+    diagnostic_snapshot.relay_commanded_on = safety_relay_allowed(&safety_state);
+    diagnostic_snapshot.level_shifter_on = safety_state.level_shifter_enabled;
+    diagnostic_snapshot.s2_valid = s2_valid;
+    diagnostic_snapshot.s4_valid = s4_valid;
+    diagnostic_snapshot.s2_fresh = s2_fresh;
+    diagnostic_snapshot.s4_fresh = s4_fresh;
+    diagnostic_snapshot.s2_high_us = s2_capture->high_us;
+    diagnostic_snapshot.s2_period_us = s2_capture->period_us;
+    diagnostic_snapshot.s4_high_us = s4_capture->high_us;
+    diagnostic_snapshot.s4_period_us = s4_capture->period_us;
+    diagnostic_snapshot.s2_duty_pct = filter_state.s2_filtered_pct;
+    diagnostic_snapshot.s4_duty_pct = filter_state.s4_filtered_pct;
+    diagnostic_snapshot.travel_pct = travel_pct;
+    diagnostic_snapshot.plausibility_error_pct = plausibility_error_pct;
+    diagnostic_snapshot.startup_valid_elapsed_ms = safety_state.startup_valid_elapsed_ms;
+    diagnostic_snapshot.stale_events = safety_state.stale_events;
+    diagnostic_snapshot.rejected_periods = input_capture_get_total_rejected_periods();
+    diagnostic_snapshot.rejected_pulses = input_capture_get_total_rejected_pulses();
+    diagnostic_snapshot.plausibility_violations = safety_state.plausibility_violations;
+    diagnostic_snapshot.exti_edges = input_capture_get_total_edge_count();
 }
 
 /* Executes one 1 kHz control iteration from input sampling through output update. */
@@ -102,7 +102,7 @@ static void run_control_tick(void)
     pwm_capture_snapshot_t s4_capture; /* latest copied capture state for the S4 input */
     bool s2_valid; /* true when the S2 capture converts into a usable duty cycle */
     bool s4_valid; /* true when the S4 capture converts into a usable duty cycle */
-    const uint32_t now_ms = HAL_GetTick(); /* current millisecond tick used for telemetry scheduling */
+    const uint32_t now_ms = HAL_GetTick(); /* current millisecond tick used for diagnostic scheduling */
     uint32_t now_us; /* current microsecond timer count used for freshness checks */
     float raw_s2_pct; /* raw S2 duty cycle derived from the latest capture snapshot */
     float raw_s4_pct; /* raw S4 duty cycle derived from the latest capture snapshot */
@@ -128,8 +128,14 @@ static void run_control_tick(void)
     travel_pct = control_compute_travel_pct(filter_state.s2_filtered_pct, filter_state.s4_filtered_pct);
     plausibility_error_pct = (filter_state.s2_filtered_pct + filter_state.s4_filtered_pct) - 100.0f;
 
-    /* Auto-promote from passthrough to active mode after sustained pedal rest. */
-    if (!manual_override && (requested_mode == FUNCTIONAL_MODE_PASSTHROUGH)) {
+    /* Auto-promote from passthrough to active mode after sustained pedal rest.
+     * Only runs once startup is complete, no fault is latched, manual override
+     * is inactive, and the mode is still PASSTHROUGH.  While startup is pending
+     * the timer is held at zero so a completed startup does not skip the hold. */
+    if (!safety_state.startup_complete) {
+        rest_hold_elapsed_ms = 0U;
+    } else if (!manual_override && (requested_mode == FUNCTIONAL_MODE_PASSTHROUGH) &&
+                   !safety_fault_latched(&safety_state)) {
         if (control_pedal_at_rest(travel_pct)) {
             if (rest_hold_elapsed_ms < REST_HOLD_MS) {
                 rest_hold_elapsed_ms += CONTROL_TICK_MS;
@@ -173,22 +179,22 @@ static void run_control_tick(void)
         output_s4_pct = filter_state.s4_filtered_pct;
     }
 
-    /* Apply outputs and capture a telemetry snapshot for periodic diagnostics. */
+    /* Apply outputs and capture a diagnostic snapshot for periodic reporting. */
     output_pwm_set_duty_pct(&htim3, output_s2_pct, output_s4_pct);
     set_relay(safety_relay_allowed(&safety_state));
-    update_telemetry(&s2_capture,
-                     &s4_capture,
-                     s2_valid,
-                     s4_valid,
-                     s2_fresh,
-                     s4_fresh,
-                     travel_pct,
-                     plausibility_error_pct);
+    update_diagnostics(&s2_capture,
+                       &s4_capture,
+                       s2_valid,
+                       s4_valid,
+                       s2_fresh,
+                       s4_fresh,
+                       travel_pct,
+                       plausibility_error_pct);
 
-    /* Emit telemetry at the configured reporting interval. */
-    if ((now_ms - last_telemetry_ms) >= TELEMETRY_PRINT_INTERVAL_MS) {
-        serial_cli_write_telemetry(&telemetry_snapshot);
-        last_telemetry_ms = now_ms;
+    /* Emit diagnostics at the configured reporting interval. */
+    if ((now_ms - last_diagnostic_ms) >= DIAGNOSTIC_PRINT_INTERVAL_MS) {
+        serial_cli_write_diagnostics(&diagnostic_snapshot);
+        last_diagnostic_ms = now_ms;
     }
 }
 
@@ -223,7 +229,7 @@ int main(void)
 
     /* Enable level shifter and print CLI banner for operator interaction. */
     set_level_shifter(true);
-    last_telemetry_ms = HAL_GetTick();
+    last_diagnostic_ms = HAL_GetTick();
     serial_cli_print_banner();
 
     /* Poll CLI continuously and run the control task when tick flag is set. */

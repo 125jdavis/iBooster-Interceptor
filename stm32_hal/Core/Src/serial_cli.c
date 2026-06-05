@@ -189,7 +189,7 @@ void serial_cli_poll(functional_mode_t *requested_mode,
     }
 }
 
-/* Prints startup help and telemetry column headers. */
+/* Prints startup help and diagnostics column headers. */
 void serial_cli_print_banner(void)
 {
     write_line("# Commands: P=passthrough  A=active  C=command  R=resume auto");
@@ -197,17 +197,17 @@ void serial_cli_print_banner(void)
     write_line("state\tmode\trelay\tlvl\ts2_high\ts2_period\ts2_duty\ts4_high\ts4_period\ts4_duty\ttravel\tplaus\tfaults");
 }
 
-/* Formats and emits one tab-delimited telemetry sample line. */
-void serial_cli_write_telemetry(const telemetry_snapshot_t *snapshot)
+/* Formats and emits one tab-delimited diagnostics sample line. */
+void serial_cli_write_diagnostics(const diagnostic_snapshot_t *snapshot)
 {
-    char line[256]; /* formatted telemetry row written to the serial transport */
+    char line[256]; /* formatted diagnostics row written to the serial transport */
 
     (void)snprintf(line,
                    sizeof(line),
                    "%s\t%s\t%u\t%u\t%lu\t%lu\t%.2f\t%lu\t%lu\t%.2f\t%.2f\t%.2f\t0x%08lX\r\n",
                    serial_cli_state_name(snapshot->state),
                    serial_cli_mode_name(snapshot->mode),
-                   snapshot->relay_on ? 1U : 0U,
+                   snapshot->relay_commanded_on ? 1U : 0U,
                    snapshot->level_shifter_on ? 1U : 0U,
                    (unsigned long)snapshot->s2_high_us,
                    (unsigned long)snapshot->s2_period_us,
@@ -221,16 +221,16 @@ void serial_cli_write_telemetry(const telemetry_snapshot_t *snapshot)
     transport_write_string(line);
 }
 
-/* Default weak transport read stub for integration override. */
-__attribute__((weak)) int serial_cli_transport_read(uint8_t *byte)
+extern UART_HandleTypeDef huart1; /* USART1 peripheral used for CLI and diagnostic serial output */
+
+/* Polls USART1 for one received byte with zero timeout; returns 1 if a byte was read, 0 otherwise. */
+int serial_cli_transport_read(uint8_t *byte)
 {
-    (void)byte;
-    return 0;
+    return (HAL_UART_Receive(&huart1, byte, 1U, 0U) == HAL_OK) ? 1 : 0;
 }
 
-/* Default weak transport write stub for integration override. */
-__attribute__((weak)) void serial_cli_transport_write(const uint8_t *data, uint16_t length)
+/* Transmits data over USART1; blocks until all bytes are sent or the 500 ms timeout expires. */
+void serial_cli_transport_write(const uint8_t *data, uint16_t length)
 {
-    (void)data;
-    (void)length;
+    (void)HAL_UART_Transmit(&huart1, data, length, 500U);
 }
