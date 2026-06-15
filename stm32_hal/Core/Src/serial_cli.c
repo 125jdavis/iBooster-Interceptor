@@ -6,6 +6,7 @@
 
 #include "app_config.h"
 #include "control.h"
+#include "usbd_cdc_if.h"
 
 static char command_buffer[SERIAL_CMD_BUFFER_SIZE]; /* accumulates the current command line from UART input */
 static uint32_t command_length; /* number of valid characters currently stored in the command buffer */
@@ -221,16 +222,22 @@ void serial_cli_write_diagnostics(const diagnostic_snapshot_t *snapshot)
     transport_write_string(line);
 }
 
-extern UART_HandleTypeDef huart1; /* USART1 peripheral used for CLI and diagnostic serial output */
-
-/* Polls USART1 for one received byte with zero timeout; returns 1 if a byte was read, 0 otherwise. */
+/* Polls USB CDC RX FIFO for one received byte; returns 1 if a byte was read, 0 otherwise. */
 int serial_cli_transport_read(uint8_t *byte)
 {
-    return (HAL_UART_Receive(&huart1, byte, 1U, 0U) == HAL_OK) ? 1 : 0;
+    return usbd_cdc_read_byte(byte);
 }
 
-/* Transmits data over USART1; blocks until all bytes are sent or the 500 ms timeout expires. */
+/* Best-effort USB CDC transmit in 64-byte chunks; data can be dropped while host is not ready. */
 void serial_cli_transport_write(const uint8_t *data, uint16_t length)
 {
-    (void)HAL_UART_Transmit(&huart1, data, length, 500U);
+    uint16_t offset = 0U;
+
+    while (offset < length) {
+        const uint16_t chunk = (uint16_t)(((length - offset) > 64U) ? 64U : (length - offset));
+        if (CDC_Transmit_FS((uint8_t *)(data + offset), chunk) != USBD_OK) {
+            break;
+        }
+        offset += chunk;
+    }
 }

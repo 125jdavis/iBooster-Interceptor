@@ -20,6 +20,7 @@ void MX_TIM3_Init(void);
 void MX_TIM10_Init(void);
 void MX_USART1_UART_Init(void);
 void MX_IWDG_Init(void);
+void MX_USB_DEVICE_Init(void);
 
 void Error_Handler(void);
 

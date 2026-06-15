@@ -33,9 +33,9 @@ void SystemClock_Config(void)
     osc.PLL.PLLState = RCC_PLL_ON;
     osc.PLL.PLLSource = RCC_PLLSOURCE_HSI;
     osc.PLL.PLLM = 16;
-    osc.PLL.PLLN = 400;
+    osc.PLL.PLLN = 384;
     osc.PLL.PLLP = RCC_PLLP_DIV4;
-    osc.PLL.PLLQ = 7;
+    osc.PLL.PLLQ = 8;
     if (HAL_RCC_OscConfig(&osc) != HAL_OK) {
         Error_Handler();
     }

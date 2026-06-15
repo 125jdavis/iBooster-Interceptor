@@ -10,6 +10,7 @@
 #include "output_pwm.h"
 #include "safety.h"
 #include "serial_cli.h"
+#include "usb_device.h"
 
 extern TIM_HandleTypeDef htim2; /* free-running timestamp timer for input capture */
 extern TIM_HandleTypeDef htim3; /* dual-channel PWM output timer */
@@ -211,7 +212,7 @@ int main(void)
     MX_TIM2_Init();
     MX_TIM3_Init();
     MX_TIM10_Init();
-    MX_USART1_UART_Init();
+    MX_USB_DEVICE_Init();
     MX_IWDG_Init();
 
     /* Initialize application modules after hardware setup. */
